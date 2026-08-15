@@ -281,7 +281,9 @@ $("enhanceBtn").onclick = async () => {
   const btn = $("enhanceBtn");
   const label = btn.querySelector("span");
   btn.disabled = true;
-  label.textContent = "Writing (the 8B is composing your brief)…";
+  btn.classList.add("busy");
+  label.textContent = "Writing…";
+  $("writerStatus").textContent = "Starting the songwriter…";
   try {
     const r = await api("/api/enhance", {
       method: "POST",
@@ -308,7 +310,9 @@ $("enhanceBtn").onclick = async () => {
     toast(e.message, true);
   } finally {
     btn.disabled = false;
+    btn.classList.remove("busy");
     label.textContent = "Write full song from this";
+    $("writerStatus").textContent = "";
   }
 };
 
@@ -521,6 +525,11 @@ function connectEvents() {
         if (j.status === "error" && j.error !== "Cancelled") toast(`${j.title}: ${j.error}`, true);
         render();
       }
+    } else if (evt.type === "writer") {
+      const el = $("writerStatus");
+      if (evt.state === "done") el.textContent = "Done — opening Custom…";
+      else if (evt.state === "error") el.textContent = "";
+      else el.textContent = (evt.detail || evt.state) + "…";
     } else if (evt.type === "library") {
       loadLibrary();
     } else if (evt.type === "model") {

@@ -26,11 +26,13 @@ guidance math identical, sampling proven distribution-identical (details below).
 - **Suno-style web UI** — dark studio interface: create panel with structured-caption
   fields, lyrics editor with section-tag buttons, instrumental toggle, track library
   with players, waveform seek bar, one-click WAV download (32-bit float masters).
-- **AI songwriter** — a small companion model (Qwen3-1.7B, ~3.4GB, fetched on
-  first use) expands a one-line brief into a title, a three-part structured
-  caption, and fully tagged lyrics. (Fun finding: the music checkpoint's own 8B
-  cannot write text anymore — the music fine-tune re-adapted its embedding and
-  output layers, and chat prompting yields gibberish. Tried, documented.)
+- **AI songwriter** — a small companion model (Qwen3-1.7B, prefetched during
+  install) expands a one-line brief into a title, a three-part structured
+  caption, and fully tagged lyrics, with live progress streamed to the UI. It
+  writes on the GPU when free and on the CPU while a render is running, so it
+  never queues behind one. (Fun finding: the music checkpoint's own 8B cannot
+  write text anymore — the music fine-tune re-adapted its embedding and output
+  layers, and chat prompting yields gibberish. Tried, documented.)
 - **Ensemble rendering** — variations of a prompt render as ONE batched pass.
   This is the trick that beats the hardware wall (below).
 - **Self-healing engine** — any optimized path that fails automatically retries on
@@ -49,13 +51,15 @@ uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu1
 uv pip install "git+https://github.com/huggingface/diffusers@dafe3733fcfdbf3c48915fe77be3aef65b5d6a2d" transformers accelerate soundfile fastapi "uvicorn[standard]" triton-windows huggingface_hub
 
 .venv\Scripts\python.exe fetch_weights.py      REM ~26.5GB — only the components diffusers uses
-.venv\Scripts\python.exe presave_bf16.py       REM one-off bf16 re-save (~22GB)
+.venv\Scripts\python.exe presave_bf16.py       REM bf16 re-save + songwriter prefetch; makes launch fully offline
 start.bat
 ```
 
-Open <http://127.0.0.1:7878>. First launch loads the model (~4 min) and the first
-song compiles the CUDA graphs (a few extra minutes, cached on disk in
-`.inductor_cache` for every later session). Then it's 0.88x realtime per song.
+Open <http://127.0.0.1:7878>. **Everything is downloaded during the steps above —
+launching and generating never touch the network.** First launch loads the model
+(~4 min) and the first song compiles the CUDA graphs (a few extra minutes,
+cached on disk in `.inductor_cache` for every later session). Then it's 0.88x
+realtime per song.
 
 ## How it got 2.9x faster (and why it can't get much more)
 

@@ -68,14 +68,32 @@ def _pick_device() -> torch.device:
 
 
 @torch.no_grad()
-def write_song(brief: str, instrumental: bool = False) -> dict:
+def write_song(
+    brief: str,
+    instrumental: bool = False,
+    force_cpu: bool = False,
+    progress=None,
+) -> dict:
+    """progress: optional callable(stage: str, detail: str) — called on load,
+    device choice, and every ~15 generated tokens with a live word count."""
+
+    def report(stage, detail=""):
+        if progress is not None:
+            try:
+                progress(stage, detail)
+            except Exception:
+                pass
+
     with _lock:
+        if _model is None:
+            report("loading", "Loading songwriter model")
         _load()
-        device = _pick_device()
+        device = torch.device("cpu") if force_cpu else _pick_device()
         _model.to(device)
         if device.type == "cpu":
             _model.float()  # bf16 CPU inference is slow on many kernels
         log.info("songwriter running on %s", device)
+        report("writing", f"Writing on {device.type.upper()}")
 
         ask = brief.strip()
         if instrumental:
@@ -93,7 +111,11 @@ def write_song(brief: str, instrumental: bool = False) -> dict:
                 messages, tokenize=False, add_generation_prompt=True
             )
         inputs = _tokenizer(text, return_tensors="pt").to(device)
-        out = _model.generate(
+
+        from transformers import TextIteratorStreamer
+
+        streamer = TextIteratorStreamer(_tokenizer, skip_prompt=True, skip_special_tokens=True)
+        kwargs = dict(
             **inputs,
             max_new_tokens=700,
             do_sample=True,
@@ -101,14 +123,27 @@ def write_song(brief: str, instrumental: bool = False) -> dict:
             top_p=0.9,
             repetition_penalty=1.05,
             pad_token_id=_tokenizer.eos_token_id,
+            streamer=streamer,
         )
-        raw = _tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        worker = threading.Thread(target=_model.generate, kwargs=kwargs, daemon=True)
+        worker.start()
+        pieces = []
+        chunks = 0
+        for piece in streamer:
+            pieces.append(piece)
+            chunks += 1
+            if chunks % 8 == 0:
+                words = sum(len(p.split()) for p in pieces)
+                report("writing", f"Writing on {device.type.upper()} — {words} words")
+        worker.join()
+        raw = "".join(pieces)
         # Qwen3 may open with a reasoning block even when asked not to.
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
         # Free GPU room for renders; keep weights cached on CPU.
         if device.type == "cuda":
             _model.to("cpu")
             torch.cuda.empty_cache()
+    report("parsing", "Structuring the result")
     return _parse(raw, instrumental)
 
 

@@ -346,19 +346,39 @@ class Engine:
 
     # ---------- worker ----------
 
-    def enhance(self, brief: str, instrumental: bool, timeout: float = 600.0) -> dict:
-        # Timeout covers the worst case: a cold model load (~250s) plus a
-        # queued render ahead plus the write itself.
-        """Queue a songwriter request on the GPU worker and wait for it.
+    def _writer_progress(self, stage: str, detail: str) -> None:
+        self._emit({"type": "writer", "state": stage, "detail": detail})
 
-        Uses the resident 8B; runs behind any in-flight render (single GPU)."""
+    def enhance(self, brief: str, instrumental: bool, timeout: float = 600.0) -> dict:
+        """Run the songwriter. If the GPU worker is busy rendering, write on
+        CPU immediately instead of queueing behind a multi-minute render."""
+        with self._lock:
+            busy = bool(self.groups) or any(
+                self.jobs[j].status in ("queued", "loading", "running") for j in self.order
+            )
+        if busy:
+            self._writer_progress("writing", "GPU is rendering — writing on CPU instead")
+            import writer
+
+            try:
+                result = writer.write_song(
+                    brief, instrumental, force_cpu=True, progress=self._writer_progress
+                )
+                self._writer_progress("done", "")
+                return result
+            except Exception as exc:
+                self._writer_progress("error", str(exc))
+                raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
+
         wid = uuid.uuid4().hex[:12]
         req = {"brief": brief, "instrumental": instrumental,
                "event": threading.Event(), "result": None, "error": None}
         self.writes[wid] = req
+        self._writer_progress("queued", "Starting the songwriter")
         self._q.put(f"write:{wid}")
         if not req["event"].wait(timeout):
             self.writes.pop(wid, None)
+            self._writer_progress("error", "timed out")
             raise TimeoutError("songwriter timed out (a render may be occupying the GPU)")
         self.writes.pop(wid, None)
         if req["error"]:
@@ -374,10 +394,14 @@ class Engine:
             # (or wait for) the 22GB music pipeline just to write lyrics.
             import writer
 
-            req["result"] = writer.write_song(req["brief"], req["instrumental"])
+            req["result"] = writer.write_song(
+                req["brief"], req["instrumental"], progress=self._writer_progress
+            )
+            self._writer_progress("done", "")
         except Exception as exc:
             log.error("songwriter failed: %s", traceback.format_exc())
             req["error"] = f"{type(exc).__name__}: {exc}"
+            self._writer_progress("error", str(exc))
         finally:
             req["event"].set()
 
