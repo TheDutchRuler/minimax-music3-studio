@@ -220,7 +220,9 @@ class Engine:
             frames = duration * 25.0
             bucket = ((int(frames) + 700 + 8 + 1023) // 1024) * 1024  # ~700 prompt tokens
             kv_gb_per_row = bucket * 0.1406 / 1024  # MB per token-row -> GB
-            headroom = budget_gb - 17.2 - 0.5  # residency + graphs/workspace
+            # 17.0 = measured residency+workspace: a 20s trio (1.69GB of KV)
+            # peaked at ~18.7GB under the 19.19GB cap. Calibrated, not derived.
+            headroom = budget_gb - 17.0
             rows = int(headroom / kv_gb_per_row) if kv_gb_per_row > 0 else 2
             max_group = max(1, min(4, rows // 2))
         batchable = min(count, max_group)

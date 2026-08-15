@@ -93,6 +93,10 @@ the same whether it serves one song or four. `app/ensemble.py` decodes K
 same-prompt variations in lockstep (batch 2K rows) and batches the DiT across
 songs too (grouped by exact frame count — padding never enters the math). Three
 variations cost barely more than one; per-song speed goes **sub-realtime**.
+Batch size is duration-aware — per-song KV cache grows with length, so on 24GB
+the engine batches 3 variations up to ~1 minute, 2 up to ~2 minutes, and runs
+longer songs solo (nearer the 1.5x solo rate); extra requested variations
+render solo after the batch rather than overflowing it.
 
 **Negative results, documented so you don't repeat them:**
 - Per-layer ("group") offloading of the LLM — the model card suggests it for 8GB
