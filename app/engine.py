@@ -208,20 +208,21 @@ class Engine:
         # Same-prompt variations render as ONE batched AR pass (ensemble):
         # the memory-bandwidth cost of the 8B+depth reads amortizes across
         # variations, so K songs cost barely more than one AR stage.
-        # Group size is VRAM-gated: the batched AR needs the 17.6GB LLM+depth
-        # residency plus a per-song KV cache and decode graphs under the cap.
-        # Derived from the actual device so any CUDA card gets a sane value;
-        # a too-ambitious group still degrades safely (group -> solo -> eager).
+        # Group size is VRAM- AND duration-gated: the batched AR keeps the
+        # ~17.2GB LLM+depth residency plus a KV cache of
+        # bucket_tokens x 2K rows x ~0.141MB under the cap — long songs eat the
+        # headroom fast (a 3-min song needs ~0.7GB per song of KV alone).
+        # A too-ambitious group still degrades safely (group -> solo -> eager).
         max_group = 1
         if torch.cuda.is_available():
             frac = float(os.environ.get("MUSIC3_VRAM_FRACTION", "0.80"))
             budget_gb = torch.cuda.get_device_properties(0).total_memory * frac / 1024**3
-            if budget_gb >= 21.5:
-                max_group = 4
-            elif budget_gb >= 19.0:
-                max_group = 3
-            elif budget_gb >= 18.0:
-                max_group = 2
+            frames = duration * 25.0
+            bucket = ((int(frames) + 700 + 8 + 1023) // 1024) * 1024  # ~700 prompt tokens
+            kv_gb_per_row = bucket * 0.1406 / 1024  # MB per token-row -> GB
+            headroom = budget_gb - 17.2 - 0.5  # residency + graphs/workspace
+            rows = int(headroom / kv_gb_per_row) if kv_gb_per_row > 0 else 2
+            max_group = max(1, min(4, rows // 2))
         batchable = min(count, max_group)
         gid = uuid.uuid4().hex[:8] if (batchable > 1 and self.turbo) else None
         created = []
@@ -231,6 +232,9 @@ class Engine:
                 if seed is None
                 else int(seed) + i
             )
+            # Only the first `batchable` variations share the batched pass;
+            # the rest render solo afterwards instead of blowing the VRAM gate.
+            in_group = gid is not None and i < batchable
             job = Job(
                 id=uuid.uuid4().hex[:12],
                 title=title.strip() or "Untitled",
@@ -240,7 +244,7 @@ class Engine:
                 duration=duration,
                 seed=s,
                 steps=steps,
-                group=gid,
+                group=gid if in_group else None,
             )
             with self._lock:
                 self.jobs[job.id] = job
@@ -248,9 +252,13 @@ class Engine:
             self._push_job(job)
             created.append(job)
         if gid is not None:
+            grouped = [j for j in created if j.group == gid]
             with self._lock:
-                self.groups[gid] = [j.id for j in created]
+                self.groups[gid] = [j.id for j in grouped]
             self._q.put(f"group:{gid}")
+            for job in created:
+                if job.group is None:
+                    self._q.put(job.id)
         else:
             for job in created:
                 self._q.put(job.id)
@@ -438,6 +446,12 @@ class Engine:
                         self._undo_turbo()
                     finally:
                         self._undo_turbo = None
+                    try:
+                        from turbo import purge_runtime_state
+
+                        purge_runtime_state(self.pipe)
+                    except Exception:
+                        pass
                     gc.collect()
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
@@ -561,6 +575,12 @@ class Engine:
         except Exception:
             log.error("ensemble group %s failed: %s", gid, traceback.format_exc())
             log.warning("group %s falling back to solo renders", gid)
+            try:
+                from turbo import purge_runtime_state
+
+                purge_runtime_state(self.pipe)
+            except Exception:
+                pass
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

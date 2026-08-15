@@ -492,6 +492,38 @@ def fold_vocoder_weight_norm(pipe):
     log.info("vocoder: folded weight_norm on %d convs", folded)
 
 
+def purge_runtime_state(pipe):
+    """Free per-session KV caches and compiled-decode references after an OOM,
+    so fallback retries start from clean memory instead of the poisoned state
+    the failed attempt left behind (its caches otherwise stay referenced by
+    the block instances and keep the GPU pinned near the cap)."""
+    import gc
+
+    blocks = getattr(getattr(pipe, "blocks", None), "sub_blocks", None)
+    if blocks is not None:
+        try:
+            iterable = blocks.values()
+        except AttributeError:
+            iterable = list(blocks)
+        for block in iterable:
+            for attr in ("_turbo_caches", "_turbo_decode_fns", "_turbo_sample_fn",
+                         "_turbo_depth_fn", "_turbo_cache_unmarked"):
+                if hasattr(block, attr):
+                    try:
+                        delattr(block, attr)
+                    except Exception:
+                        pass
+    if hasattr(pipe, "_ensemble_state"):
+        try:
+            del pipe._ensemble_state
+        except Exception:
+            pass
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    log.info("turbo runtime state purged (caches/compiled decoders freed)")
+
+
 def install_all(pipe):
     """Install every verified optimization; returns a single undo callable."""
     try:
