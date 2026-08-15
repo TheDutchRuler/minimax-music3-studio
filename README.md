@@ -26,8 +26,11 @@ guidance math identical, sampling proven distribution-identical (details below).
 - **Suno-style web UI** — dark studio interface: create panel with structured-caption
   fields, lyrics editor with section-tag buttons, instrumental toggle, track library
   with players, waveform seek bar, one-click WAV download (32-bit float masters).
-- **AI songwriter** — the model's own resident 8B LLM expands a one-line brief into
-  a title, a three-part structured caption, and fully tagged lyrics (zero extra VRAM).
+- **AI songwriter** — a small companion model (Qwen3-1.7B, ~3.4GB, fetched on
+  first use) expands a one-line brief into a title, a three-part structured
+  caption, and fully tagged lyrics. (Fun finding: the music checkpoint's own 8B
+  cannot write text anymore — the music fine-tune re-adapted its embedding and
+  output layers, and chat prompting yields gibberish. Tried, documented.)
 - **Ensemble rendering** — variations of a prompt render as ONE batched pass.
   This is the trick that beats the hardware wall (below).
 - **Self-healing engine** — any optimized path that fails automatically retries on

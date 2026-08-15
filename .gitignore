@@ -21,3 +21,4 @@ labs/audio/
 
 # Outreach drafts (posted as issues, not repo content)
 outreach_*.md
+*.tmp

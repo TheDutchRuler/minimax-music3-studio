@@ -1,26 +1,28 @@
-"""Songwriter: turn a short brief into a structured caption + tagged lyrics
-using the ALREADY-LOADED Qwen3-8B language model.
+"""Songwriter: turn a short brief into a structured caption + tagged lyrics.
 
-The music checkpoint's Global LLM is initialized from Qwen3-8B and keeps the
-full text vocabulary; a logits mask suppresses the music-token range (ids
->= 151650: audio markers, CFG token, and the 16k semantic codes) so generation
-stays in plain text. Whether the music fine-tune preserved enough instruction-
-following for good lyrics is an empirical question — the caller should treat
-weak output as a signal to fall back to hand-written prompts.
+Uses a small companion instruct model (Qwen3-1.7B, ~3.4GB, downloaded on first
+use). The obvious candidate — the music checkpoint's own 8B, which is resident
+anyway — was tried first and CANNOT write text anymore: its embedding/output
+layers were re-adapted to music tokens during the music fine-tune, and chat
+prompting yields CJK gibberish. Documented so nobody retries it.
 
-Zero extra VRAM: the model is resident for rendering anyway.
+Device is chosen per call: GPU when it has room (music model not yet loaded —
+seconds per song spec), CPU otherwise (a minute or two, still fine for a
+button). The writer never touches the music pipeline, so briefs can be
+expanded before the 4-minute model load has ever happened.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import threading
 
 import torch
 
 log = logging.getLogger("music3.writer")
 
-_TEXT_VOCAB_CUTOFF = 151650  # below: text + chat specials; at/above: music tokens
+WRITER_MODEL = "Qwen/Qwen3-1.7B"
 
 _SYSTEM = (
     "You are an expert songwriter and music producer writing input for a "
@@ -38,43 +40,75 @@ _SYSTEM = (
     "Output nothing else. No explanations."
 )
 
+_lock = threading.Lock()
+_model = None
+_tokenizer = None
 
-class _TextOnly(torch.nn.Module):
-    def __call__(self, input_ids, scores):
-        scores[..., _TEXT_VOCAB_CUTOFF:] = -float("inf")
-        return scores
+
+def _load():
+    global _model, _tokenizer
+    if _model is not None:
+        return
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    log.info("loading songwriter model %s (first use downloads ~3.4GB)", WRITER_MODEL)
+    _tokenizer = AutoTokenizer.from_pretrained(WRITER_MODEL, token=False)
+    _model = AutoModelForCausalLM.from_pretrained(
+        WRITER_MODEL, torch_dtype=torch.bfloat16, token=False
+    )
+    _model.eval()
+
+
+def _pick_device() -> torch.device:
+    if torch.cuda.is_available():
+        free, _total = torch.cuda.mem_get_info()
+        if free / 1024**3 >= 6.0:
+            return torch.device("cuda")
+    return torch.device("cpu")
 
 
 @torch.no_grad()
-def write_song(pipe, brief: str, instrumental: bool = False) -> dict:
-    lm = pipe.language_model
-    tokenizer = pipe.tokenizer
-    if getattr(lm, "_hf_hook", None) is not None:
-        lm._hf_hook.pre_forward(lm)
-    device = lm.model.embed_tokens.weight.device
+def write_song(brief: str, instrumental: bool = False) -> dict:
+    with _lock:
+        _load()
+        device = _pick_device()
+        _model.to(device)
+        if device.type == "cpu":
+            _model.float()  # bf16 CPU inference is slow on many kernels
+        log.info("songwriter running on %s", device)
 
-    ask = brief.strip()
-    if instrumental:
-        ask += "\n(This is an INSTRUMENTAL track: output 'LYRICS:' followed only by '[instrumental]'.)"
-    messages = [
-        {"role": "system", "content": _SYSTEM},
-        {"role": "user", "content": ask},
-    ]
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer(text, return_tensors="pt").to(device)
-
-    out = lm.generate(
-        **inputs,
-        max_new_tokens=650,
-        do_sample=True,
-        temperature=0.8,
-        top_p=0.9,
-        repetition_penalty=1.05,
-        logits_processor=[_TextOnly()],
-        pad_token_id=tokenizer.eos_token_id,
-    )
-    raw = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-    log.info("writer raw output (%d chars)", len(raw))
+        ask = brief.strip()
+        if instrumental:
+            ask += "\n(This is an INSTRUMENTAL track: output 'LYRICS:' followed only by '[instrumental]'.)"
+        messages = [
+            {"role": "system", "content": _SYSTEM},
+            {"role": "user", "content": ask},
+        ]
+        try:
+            text = _tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            )
+        except TypeError:  # template without the thinking switch
+            text = _tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        inputs = _tokenizer(text, return_tensors="pt").to(device)
+        out = _model.generate(
+            **inputs,
+            max_new_tokens=700,
+            do_sample=True,
+            temperature=0.8,
+            top_p=0.9,
+            repetition_penalty=1.05,
+            pad_token_id=_tokenizer.eos_token_id,
+        )
+        raw = _tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        # Qwen3 may open with a reasoning block even when asked not to.
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        # Free GPU room for renders; keep weights cached on CPU.
+        if device.type == "cuda":
+            _model.to("cpu")
+            torch.cuda.empty_cache()
     return _parse(raw, instrumental)
 
 
@@ -92,7 +126,6 @@ def _parse(raw: str, instrumental: bool) -> dict:
     m = re.search(r"LYRICS:\s*\n?(.+)", raw, re.DOTALL)
     if m:
         lyrics = m.group(1).strip()
-        # Keep only through the last plausible lyric content; strip trailing chatter.
         lyrics = re.split(r"\n(?:Note|Explanation|---)\b", lyrics)[0].strip()
 
     if instrumental:

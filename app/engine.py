@@ -370,13 +370,11 @@ class Engine:
         if req is None:
             return
         try:
-            if self.pipe is None:
-                self._ensure_loaded()
+            # The writer uses its own small companion model — no need to load
+            # (or wait for) the 22GB music pipeline just to write lyrics.
             import writer
 
-            req["result"] = writer.write_song(
-                self.pipe, req["brief"], req["instrumental"]
-            )
+            req["result"] = writer.write_song(req["brief"], req["instrumental"])
         except Exception as exc:
             log.error("songwriter failed: %s", traceback.format_exc())
             req["error"] = f"{type(exc).__name__}: {exc}"

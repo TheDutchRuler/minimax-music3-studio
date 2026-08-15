@@ -24,5 +24,9 @@ if __name__ == "__main__":
         local_dir=LOCAL_DIR,
         ignore_patterns=IGNORE,
         max_workers=8,
+        # The repo is public; token=False forces anonymous access so a stale or
+        # invalid token in the user's HF config can't turn this into a spurious
+        # 401 "Repository Not Found".
+        token=False,
     )
     print(f"DONE -> {path}")
