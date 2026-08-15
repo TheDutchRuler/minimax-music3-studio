@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Music 3 Studio</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+</head>
+<body>
+
+<aside class="rail">
+  <div class="brand">
+    <div class="brand-mark">M3</div>
+    <div class="brand-text">
+      <strong>Music 3</strong>
+      <span>Studio</span>
+    </div>
+  </div>
+
+  <nav class="rail-nav">
+    <button class="nav-item active" data-view="create">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Create</span>
+    </button>
+    <button class="nav-item" data-view="library">
+      <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Library</span>
+    </button>
+  </nav>
+
+  <div class="rail-foot">
+    <div class="gpu-chip" id="gpuChip">
+      <span class="dot" id="modelDot"></span>
+      <div>
+        <div class="gpu-name" id="gpuName">—</div>
+        <div class="gpu-vram" id="gpuVram">checking…</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<main class="shell">
+
+  <!-- ============ CREATE PANEL ============ -->
+  <section class="composer" id="composer">
+    <div class="composer-head">
+      <div class="mode-switch">
+        <button class="mode-btn active" data-mode="simple">Simple</button>
+        <button class="mode-btn" data-mode="custom">Custom</button>
+      </div>
+    </div>
+
+    <div class="composer-body">
+
+      <!-- SIMPLE -->
+      <div class="pane" id="pane-simple">
+        <label class="field">
+          <span class="field-label">Song description</span>
+          <textarea id="simplePrompt" rows="6" placeholder="a dreamy synthwave track about driving home at 3am, female vocals, warm analog pads"></textarea>
+          <span class="counter"><span id="simpleCount">0</span></span>
+        </label>
+        <p class="hint">Music 3 writes its own lyrics and arrangement from your description.</p>
+        <button class="enhance-btn" id="enhanceBtn">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 16l.6 1.7L7.3 18l-1.7.6L5 20.3 4.4 18.6 2.7 18l1.7-.3z"/></svg>
+          <span>Write full song from this</span>
+        </button>
+        <p class="hint">The built-in 8B writes a title, a structured caption and tagged lyrics from your brief, then drops them into the Custom tab for you to tweak.</p>
+      </div>
+
+      <!-- CUSTOM -->
+      <div class="pane hidden" id="pane-custom">
+        <label class="field">
+          <span class="field-label">Lyrics</span>
+          <textarea id="lyrics" rows="10" placeholder="[Verse]&#10;Morning light filtering through the pine&#10;Every quiet street is yours and mine&#10;&#10;[Chorus]&#10;Softly the world begins to breathe"></textarea>
+          <span class="counter"><span id="lyricsCount">0</span></span>
+        </label>
+        <div class="tag-row" id="tagRow">
+          <span class="tag-hint">Insert:</span>
+          <button class="tag" data-tag="[Intro]">Intro</button>
+          <button class="tag" data-tag="[Verse]">Verse</button>
+          <button class="tag" data-tag="[Pre-Chorus]">Pre-Chorus</button>
+          <button class="tag" data-tag="[Chorus]">Chorus</button>
+          <button class="tag" data-tag="[Bridge]">Bridge</button>
+          <button class="tag" data-tag="[Solo]">Solo</button>
+          <button class="tag" data-tag="[Outro]">Outro</button>
+        </div>
+
+        <div class="struct-head">
+          <span class="field-label">Structured caption</span>
+          <button class="linkbtn" id="loadExample">Load example</button>
+        </div>
+        <p class="hint">The model follows this three-part format most precisely. Fill what you know; blank parts are dropped.</p>
+
+        <label class="field">
+          <span class="field-label sub">1 · Global metadata</span>
+          <textarea id="metaGlobal" rows="3" placeholder="Genre: acoustic pop. BPM: 96. Key: C major. Warm and intimate, building gently into the chorus. Polished modern production."></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label sub">2 · Vocal details</span>
+          <textarea id="metaVocal" rows="3" placeholder="Soft female lead, close and breathy, light stacked harmonies in the chorus, subtle plate reverb."></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label sub">3 · Arrangement</span>
+          <textarea id="metaArrange" rows="3" placeholder="Fingerpicked guitar and soft piano; brushed drums and upright bass enter in the chorus; wide stereo pads in the bridge."></textarea>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Title</span>
+          <input id="title" type="text" maxlength="60" placeholder="Untitled">
+        </label>
+      </div>
+
+      <!-- SHARED CONTROLS -->
+      <div class="controls">
+        <div class="switch-row">
+          <div>
+            <div class="switch-title">Instrumental</div>
+            <div class="switch-sub">No vocals, arrangement only</div>
+          </div>
+          <button class="switch" id="instrumental" role="switch" aria-checked="false"><i></i></button>
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head">
+            <span>Length</span>
+            <output id="durationOut">1:30</output>
+          </div>
+          <input type="range" id="duration" min="20" max="300" step="5" value="90">
+          <div class="slider-scale"><span>0:20</span><span>5:00</span></div>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="adv-body">
+            <label class="field inline" title="Variations render together in one batched pass — 3 songs cost barely more than 1, and per-song speed goes below realtime.">
+              <span class="field-label">Variations</span>
+              <select id="count">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <label class="field inline">
+              <span class="field-label">Seed</span>
+              <input id="seed" type="number" placeholder="random" min="0">
+            </label>
+            <label class="field inline">
+              <span class="field-label">Quality steps</span>
+              <input id="steps" type="number" placeholder="30 (default)" min="10" max="100">
+            </label>
+            <p class="hint">Flow-matching steps per chunk. 30 is the reference recipe the model was tuned for. Raising it grows render time linearly (a 3-min song runs ~44 chunks) with no demonstrated quality gain — leave blank unless comparing.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="composer-foot">
+      <button class="create-btn" id="createBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"/></svg>
+        <span>Create</span>
+      </button>
+      <div class="foot-note" id="footNote"></div>
+    </div>
+  </section>
+
+  <!-- ============ WORKSPACE ============ -->
+  <section class="workspace">
+    <header class="ws-head">
+      <div>
+        <h1 id="wsTitle">Your songs</h1>
+        <p id="wsSub">Everything you generate is stored locally on this machine.</p>
+      </div>
+      <div class="ws-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input id="search" type="search" placeholder="Search songs">
+      </div>
+    </header>
+
+    <div class="track-list" id="trackList"></div>
+
+    <div class="empty" id="empty">
+      <div class="empty-art"></div>
+      <h2>No songs yet</h2>
+      <p>Describe a track on the left and hit Create. The first run loads ~22GB of weights onto your GPU and takes an extra minute.</p>
+    </div>
+  </section>
+</main>
+
+<!-- ============ PLAYER ============ -->
+<footer class="player hidden" id="player">
+  <div class="np">
+    <div class="np-art" id="npArt"></div>
+    <div class="np-meta">
+      <div class="np-title" id="npTitle">—</div>
+      <div class="np-sub" id="npSub"></div>
+    </div>
+  </div>
+
+  <div class="pl-center">
+    <div class="pl-buttons">
+      <button class="pl-btn" id="prevBtn" title="Previous">
+        <svg viewBox="0 0 24 24"><path d="M19 20L9 12l10-8zM5 19V5"/></svg>
+      </button>
+      <button class="pl-play" id="playBtn" title="Play/pause">
+        <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>
+        <svg id="pauseIcon" class="hidden" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+      </button>
+      <button class="pl-btn" id="nextBtn" title="Next">
+        <svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8zM19 5v14"/></svg>
+      </button>
+    </div>
+    <div class="pl-seek">
+      <span class="t" id="curTime">0:00</span>
+      <div class="wave-wrap" id="waveWrap">
+        <canvas id="wave"></canvas>
+        <div class="wave-cursor" id="waveCursor"></div>
+      </div>
+      <span class="t" id="durTime">0:00</span>
+    </div>
+  </div>
+
+  <div class="pl-right">
+    <button class="pl-btn" id="dlBtn" title="Download WAV">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l4-4m-4 4l-4-4M4 21h16"/></svg>
+    </button>
+    <div class="vol">
+      <svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM16 9a4 4 0 010 6"/></svg>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+    </div>
+  </div>
+</footer>
+
+<audio id="audio" preload="metadata"></audio>
+<div class="toasts" id="toasts"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

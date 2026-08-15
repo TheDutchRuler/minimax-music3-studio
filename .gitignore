@@ -1,0 +1,20 @@
+# Model weights (~48GB combined) — fetch with fetch_weights.py + presave_bf16.py
+models/
+models_bf16/
+
+# Local state
+.venv/
+.hfcache/
+.inductor_cache/
+__pycache__/
+*.pyc
+
+# Your generated songs stay yours
+library/
+ab/
+
+# Run artifacts
+*.log
+*.wav
+labs/logs/
+labs/audio/
