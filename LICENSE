@@ -22,6 +22,15 @@ SOFTWARE.
 
 ---
 
-This license covers the application code in this repository only. The MiniMax
-Music 3 model weights (downloaded separately) are licensed by MiniMax under
-CC BY 4.0 — see https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE.
+Scope and third-party terms:
+
+- `app/turbo.py` and `app/ensemble.py` contain portions derived from the
+  Hugging Face diffusers MiniMax Music 3 modular pipeline (Copyright 2026
+  The MiniMax Team and The HuggingFace Team), licensed under the Apache
+  License 2.0 — full text in `LICENSES/Apache-2.0.txt`; per-file headers
+  state the modifications. Those portions remain governed by Apache-2.0.
+
+- The MiniMax Music 3 model weights (downloaded separately, never included
+  in this repository) are licensed by MiniMax under CC BY 4.0 —
+  https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE.
+  Attribute MiniMax when publishing generated audio commercially.

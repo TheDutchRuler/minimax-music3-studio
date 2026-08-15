@@ -1,3 +1,11 @@
+# Portions of this file are faithful batched ports of the diffusers MiniMax
+# Music 3 modular pipeline blocks (encoders/before_denoise/denoise/decoders,
+# commit dafe3733): Copyright 2026 The MiniMax Team and The HuggingFace Team.
+# Licensed under the Apache License, Version 2.0 — see LICENSES/Apache-2.0.txt.
+# Modifications Copyright 2026 Xtraworks: generation batched across K
+# variations (lockstep AR decode, per-song seeded sampling, cross-song
+# batched CFG denoise grouped by exact frame count).
+
 """Ensemble generation: render K same-prompt variations in ONE batched pass.
 
 Why this beats the single-song wall: the AR stage is memory-bandwidth bound —

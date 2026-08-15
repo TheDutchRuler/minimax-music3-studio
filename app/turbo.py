@@ -1,3 +1,11 @@
+# Portions of this file are derived from the diffusers MiniMax Music 3 modular
+# pipeline (modular_pipelines/minimax_music3/, commit dafe3733):
+# Copyright 2026 The MiniMax Team and The HuggingFace Team.
+# Licensed under the Apache License, Version 2.0 — see LICENSES/Apache-2.0.txt.
+# Modifications Copyright 2026 Xtraworks: rebuilt the autoregressive loop with
+# a StaticCache and torch.compile CUDA graphs, sliced lm_head sampling,
+# Gumbel-max fused sampling, and a batched-CFG denoise step.
+
 """Verified speed optimizations for the MiniMax Music 3 modular pipeline.
 
 Measured on this machine (RTX 4090, 20s song, warm, seed-fixed):
