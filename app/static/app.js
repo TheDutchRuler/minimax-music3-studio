@@ -494,9 +494,12 @@ async function loadLibrary() {
   } catch (e) { /* server not up yet */ }
 }
 
+let statusFails = 0;
+
 async function loadStatus() {
   try {
     const s = await api("/api/status");
+    statusFails = 0;
     $("gpuName").textContent = s.gpu || "No CUDA GPU";
     if (s.vram) $("gpuVram").textContent = `${s.vram.used_gb} / ${s.vram.total_gb} GB used`;
     const dot = $("modelDot");
@@ -508,7 +511,15 @@ async function loadStatus() {
     // Re-sync any jobs the SSE stream may have missed (e.g. page reload).
     s.active.forEach((j) => state.jobs.set(j.id, j));
     if (s.active.length) render();
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    // Two consecutive failures = the server is gone; say so instead of
+    // freezing on the last known stage forever.
+    if (++statusFails >= 2) {
+      $("modelDot").className = "dot error";
+      $("gpuName").textContent = "Server unreachable";
+      $("gpuVram").textContent = "restart with start.bat";
+    }
+  }
 }
 
 function connectEvents() {

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 
-# Must be set before CUDA initializes: expandable segments avoid the ~0.8GB of
-# fragmentation that pushed 3-variation groups over the desktop-safe VRAM cap.
+# Helps on Linux; torch reports it unsupported on Windows (harmless no-op
+# there). What actually keeps multi-variation groups under the VRAM cap is the
+# per-batch-size artifact purge in ensemble.py.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import argparse

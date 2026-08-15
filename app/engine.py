@@ -274,6 +274,14 @@ class Engine:
         if self.pipe is not None:
             return
 
+        try:
+            # Free the songwriter's 3.4GB before the 25GB load spike.
+            import writer
+
+            writer.release()
+        except Exception:  # pragma: no cover
+            pass
+
         from diffusers import ComponentsManager, ModularPipeline
 
         self.load_state = "loading"

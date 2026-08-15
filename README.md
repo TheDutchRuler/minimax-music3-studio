@@ -124,9 +124,11 @@ Heavy renders at ~22.5GB starved Windows/Chrome of VRAM; eviction thrash froze
 the desktop in ways indistinguishable from a GPU crash — while event logs showed
 **zero** driver resets or hardware errors across the whole project. Defaults now:
 **80% VRAM cap** (`MUSIC3_VRAM_FRACTION=0.92` for unattended max speed),
-**expandable_segments allocator** (the ~0.8GB fragmentation fix that lets
+**per-batch-size artifact purging** (stale KV caches and decode graphs from a
+different variation count are freed before a group runs — this is what lets
 3-variation groups fit under the cap), no DiT capture pools. The safe profile
-measured *as fast or faster* than the aggressive one.
+measured *as fast or faster* than the aggressive one. (`expandable_segments`
+is set for Linux users; torch reports it unsupported on Windows.)
 
 ## Configuration
 

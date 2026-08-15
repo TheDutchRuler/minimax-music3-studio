@@ -76,6 +76,7 @@ def write_song(
 ) -> dict:
     """progress: optional callable(stage: str, detail: str) — called on load,
     device choice, and every ~15 generated tokens with a live word count."""
+    global _model
 
     def report(stage, detail=""):
         if progress is not None:
@@ -139,12 +140,29 @@ def write_song(
         raw = "".join(pieces)
         # Qwen3 may open with a reasoning block even when asked not to.
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-        # Free GPU room for renders; keep weights cached on CPU.
+        # Keep the model cached on CPU between writes (repeat writes are
+        # instant to start). The engine calls release() right before the music
+        # model's 25GB load spike — the only moment these 3.4GB are dangerous.
         if device.type == "cuda":
             _model.to("cpu")
             torch.cuda.empty_cache()
     report("parsing", "Structuring the result")
     return _parse(raw, instrumental)
+
+
+def release() -> None:
+    """Drop the cached writer model. Called by the engine before the music
+    pipeline's load spike; the next write reloads from the local HF cache."""
+    global _model
+    with _lock:
+        if _model is not None:
+            log.info("releasing songwriter model ahead of music-model load")
+        _model = None
+        import gc
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def _parse(raw: str, instrumental: bool) -> dict:
