@@ -51,11 +51,23 @@ def _load():
         return
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    log.info("loading songwriter model %s (first use downloads ~3.4GB)", WRITER_MODEL)
-    _tokenizer = AutoTokenizer.from_pretrained(WRITER_MODEL, token=False)
-    _model = AutoModelForCausalLM.from_pretrained(
-        WRITER_MODEL, torch_dtype=torch.bfloat16, token=False
-    )
+    log.info("loading songwriter model %s", WRITER_MODEL)
+    # Cache-only first: presave prefetches the model, and transformers would
+    # otherwise revalidate every file against the Hub on each load. Fall back
+    # to downloading only if the cache is genuinely missing.
+    try:
+        _tokenizer = AutoTokenizer.from_pretrained(
+            WRITER_MODEL, token=False, local_files_only=True
+        )
+        _model = AutoModelForCausalLM.from_pretrained(
+            WRITER_MODEL, dtype=torch.bfloat16, token=False, local_files_only=True
+        )
+    except Exception:
+        log.info("songwriter model not cached — downloading (~3.4GB, one-off)")
+        _tokenizer = AutoTokenizer.from_pretrained(WRITER_MODEL, token=False)
+        _model = AutoModelForCausalLM.from_pretrained(
+            WRITER_MODEL, dtype=torch.bfloat16, token=False
+        )
     _model.eval()
 
 
