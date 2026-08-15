@@ -56,10 +56,10 @@ start.bat
 ```
 
 Open <http://127.0.0.1:7878>. **Everything is downloaded during the steps above —
-launching and generating never touch the network.** First launch loads the model
-(~4 min) and the first song compiles the CUDA graphs (a few extra minutes,
-cached on disk in `.inductor_cache` for every later session). Then it's 0.88x
-realtime per song.
+launching and generating never touch the network, and the model loads in
+seconds** (4.2s measured; see the load-time story below). The first song
+compiles the CUDA graphs (a few minutes, cached on disk in `.inductor_cache`
+for every later session). Then it's 0.88x realtime per song.
 
 ## How it got 2.9x faster (and why it can't get much more)
 
@@ -101,10 +101,18 @@ variations cost barely more than one; per-song speed goes **sub-realtime**.
 - FP8 weight-only (torchao) measured **2.1x slower** on Windows/torch 2.11: the
   subclass never engages fused dequant kernels, so every forward dequantizes to
   bf16 (more traffic) and breaks the CUDA-graph path. Flag remains (`MUSIC3_FP8=1`).
-- NVMe vs HDD for weights: identical load time (CPU-materialization-bound).
-  Parallel shard loading: no change. bf16 pre-save: right format, no load win.
 - DiT CUDA graphs: no speedup, gigabytes of capture pools. Kernel-fusion-only
   compile kept.
+
+**The load-time detective story (ends well):** model load measured ~250s for
+weeks of session-time. NVMe vs HDD: identical. Parallel shard loading: no
+change. Conclusion at the time: "CPU-bound materialization, unfixable." Wrong.
+The real culprit was the component index recording the HF *repo id*, which
+routes every component through huggingface_hub's cache-resolution machinery —
+validating 26GB against hub metadata on every start. `presave_bf16.py` now
+rewrites the index to direct local paths (originally for offline correctness),
+and loading became a straight mmap: **measured 4.2s** on a fresh install.
+Startup went from ~4 minutes to ~4 seconds by accident, verified on purpose.
 
 ## Quality: what "same" means here, precisely
 
