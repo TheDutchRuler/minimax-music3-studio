@@ -1,0 +1,6 @@
+{
+  "_class_name": "MiniMaxMusic3EnsembleBlocks",
+  "auto_map": {
+    "ModularPipelineBlocks": "ensemble_blocks.MiniMaxMusic3EnsembleBlocks"
+  }
+}
