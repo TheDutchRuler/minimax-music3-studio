@@ -41,7 +41,7 @@ import torch
 from diffusers.modular_pipelines import ModularPipelineBlocks, ComponentsManager
 
 blocks = ModularPipelineBlocks.from_pretrained(
-    "TheDutchRuler/minimax-music3-ensemble-blocks", trust_remote_code=True
+    "Rreitsma/minimax-music3-ensemble-blocks", trust_remote_code=True
 )
 manager = ComponentsManager()
 manager.enable_auto_cpu_offload(device="cuda")
