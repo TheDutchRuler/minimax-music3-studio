@@ -383,9 +383,17 @@ def _denoise_and_vocode_group(components, frame_hiddens_list, generators, num_st
         fw = cache.get(type(transformer))
         if fw is None:
             try:
-                # No CUDA graphs for the DiT: capture pools for seq-689
-                # batch-2G activations cost gigabytes of resident VRAM.
-                fw = torch.compile(type(transformer).forward, dynamic=False, fullgraph=False)
+                # No CUDA graphs for the DiT (capture pools cost GBs);
+                # MUSIC3_DIT_AUTOTUNE=1 buys a measured +7-8% after a one-off
+                # kernel search (see turbo.py).
+                import os as _os
+
+                mode = (
+                    "max-autotune-no-cudagraphs"
+                    if _os.environ.get("MUSIC3_DIT_AUTOTUNE", "0") == "1"
+                    else None
+                )
+                fw = torch.compile(type(transformer).forward, mode=mode, dynamic=False, fullgraph=False)
             except Exception:
                 fw = type(transformer).forward
             cache[type(transformer)] = fw

@@ -107,6 +107,17 @@ render solo after the batch rather than overflowing it.
   bf16 (more traffic) and breaks the CUDA-graph path. Flag remains (`MUSIC3_FP8=1`).
 - DiT CUDA graphs: no speedup, gigabytes of capture pools. Kernel-fusion-only
   compile kept.
+- Batched CFG on the DiT: a paired A/B/A/B test (one process, same seed,
+  batching the only variable — `labs/verify_batched_cfg.py`) measured just
+  **1.07x**, and a batch-scaling microbenchmark shows why: the DiT is
+  compute-saturated from batch 1 (104→120 effective TFLOPS across batch 1→8,
+  flat per-sample time). Batching cannot meaningfully speed this stage; our
+  original 12.8→8.8s attribution had conflated warm-up settling. Reported
+  upstream in diffusers#14486.
+- The honest remaining DiT lever: kernel efficiency. `MUSIC3_DIT_AUTOTUNE=1`
+  enables max-autotune compilation — measured **+7-8%** on the DiT (117→127
+  effective TFLOPS) after a one-off ~10-minute kernel search cached in
+  `.inductor_cache`. Off by default so a new user's first song isn't slow.
 
 **The load-time detective story (ends well):** model load measured ~250s for
 weeks of session-time. NVMe vs HDD: identical. Parallel shard loading: no

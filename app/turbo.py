@@ -418,12 +418,18 @@ def install_batched_cfg():
             fw = compiled_fw.get(type(transformer))
             if fw is None:
                 try:
-                    # Default mode (no CUDA graphs): DiT graphs capture
-                    # seq-689 activations and their pools are the largest
-                    # VRAM cost of compilation — kernel fusion keeps most of
-                    # the win without pinning gigabytes.
+                    # No CUDA graphs (their seq-689 capture pools cost GBs for
+                    # zero measured speedup). MUSIC3_DIT_AUTOTUNE=1 upgrades to
+                    # max-autotune: measured +7-8% on the DiT (117->127
+                    # effective TFLOPS) after a one-off ~10-min kernel search
+                    # that persists in .inductor_cache.
+                    mode = (
+                        "max-autotune-no-cudagraphs"
+                        if os.environ.get("MUSIC3_DIT_AUTOTUNE", "0") == "1"
+                        else None
+                    )
                     fw = torch.compile(
-                        type(transformer).forward, dynamic=False, fullgraph=False
+                        type(transformer).forward, mode=mode, dynamic=False, fullgraph=False
                     )
                 except Exception as exc:  # pragma: no cover
                     log.warning("DiT compile unavailable, eager: %s", exc)
